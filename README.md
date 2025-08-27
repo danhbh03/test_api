@@ -35,7 +35,6 @@ pip install -r requirements.txt
 - `langdetect` (phát hiện ngôn ngữ)  
 - `deep-translator` (Google Translate fallback)  
 - `httpx` (HTTP client)  
-- `markdown2` (render markdown ra HTML trong chatbot)  
 - `python-dotenv` (quản lý `.env`)  
 - `groq` (client cho Groq API)  
 
