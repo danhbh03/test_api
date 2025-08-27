@@ -9,6 +9,5 @@ nest_asyncio
 langdetect
 deep-translator
 httpx
-markdown2
 python-dotenv
 groq
