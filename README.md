@@ -7,7 +7,7 @@ Repo này chứa 2 chatbot dựa trên **LightRAG**:
 
 ## 2. Yêu cầu hệ thống
 - Python **3.11.13**
-- Máy có thể kết nối internet để gọi API của:
+- Máy cần kết nối internet để gọi API của:
   - [Anthropic (Claude)](https://console.anthropic.com/dashboard)
   - [Jina AI (Embeddings)](https://jina.ai/api-dashboard/embedding)
   - [Groq LLM](https://console.groq.com/home)
@@ -51,8 +51,6 @@ JINA_API_KEY=your_jina_key_here
 # Groq
 GROQ_API_KEY=your_groq_key_here
 
-# Claude model (không cần chỉ định nếu muốn mặc định)
-# ANTHROPIC_MODEL=claude-3-5-sonnet-20240620
 ```
 
 > ⚠️ Lưu ý: nếu không có Claude API hoặc lỗi quota, hệ thống sẽ tự động fallback sang **Google Translate** để đảm bảo chatbot hoạt động.
