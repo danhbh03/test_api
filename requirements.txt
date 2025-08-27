@@ -1,0 +1,14 @@
+gradio
+lightrag
+transformers
+sentencepiece
+python-docx
+regex
+scikit-learn
+nest_asyncio
+langdetect
+deep-translator
+httpx
+markdown2
+python-dotenv
+groq
