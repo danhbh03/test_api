@@ -1,4 +1,3 @@
-# chatbot_multilang.py
 import os
 import json
 import asyncio
@@ -7,6 +6,8 @@ import re
 import unicodedata
 from collections import deque
 from dotenv import load_dotenv
+from collections import deque
+import time
 
 import gradio as gr
 from docx import Document
@@ -76,7 +77,25 @@ async def groq_model_complete(
         raise RuntimeError(f"[ERROR from Groq LLM] {e}") from e
 
 # ========= JINA v3 EMBEDDINGS =========
+JINA_RPM = 90  # chỉnh theo quota tài khoản của bạn
+_jina_request_times = deque()
+async def _jina_rate_gate():
+    now = time.monotonic()
+
+
+    while _jina_request_times and now - _jina_request_times[0] > 60:
+        _jina_request_times.popleft()
+
+
+    if len(_jina_request_times) >= JINA_RPM:
+        sleep_time = 60 - (now - _jina_request_times[0])
+        await asyncio.sleep(max(0.5, sleep_time))
+
+    _jina_request_times.append(time.monotonic())
+
 async def jina_embed(texts: list[str]) -> list[list[float]]:
+    await _jina_rate_gate()   # ⭐ FIX RPM
+
     url = "https://api.jina.ai/v1/embeddings"
     headers = {
         "Content-Type": "application/json",
@@ -88,13 +107,27 @@ async def jina_embed(texts: list[str]) -> list[list[float]]:
         "truncate": True,
         "input": texts if isinstance(texts, list) else [texts]
     }
-    async with httpx.AsyncClient(timeout=30) as ac:
-        resp = await ac.post(url, headers=headers, json=payload)
-        resp.raise_for_status()
-        data = resp.json()
-        return [item["embedding"] for item in data["data"]]
 
-# ========= TIỀN XỬ LÝ (GIỮ NGUYÊN) =========
+    for attempt in range(3):  # ⭐ retry khi 429
+        try:
+            async with httpx.AsyncClient(timeout=30) as ac:
+                resp = await ac.post(url, headers=headers, json=payload)
+
+            if resp.status_code == 429:
+                await asyncio.sleep(2 ** attempt)
+                continue
+
+            resp.raise_for_status()
+            data = resp.json()
+            return [item["embedding"] for item in data["data"]]
+
+        except Exception:
+            if attempt == 2:
+                raise
+            await asyncio.sleep(1.5)
+
+
+# ========= TIỀN XỬ LÝ =========
 def read_file_text(file):
     if file is None:
         return ""
@@ -153,41 +186,33 @@ def detect_lang(text: str, default="en"):
         return detect(text)
     except Exception:
         return default
-
-# ---- Anthropic (Claude) translation with chunking & simple rate limit ----
-# Quota (per minute) – có thể chỉnh nếu tài khoản khác:
 ANTHROPIC_RPM = 5
 ANTHROPIC_IPM = 10_000
 ANTHROPIC_OPM = 4_000
 
-# Cửa sổ cuộn 60s cho bộ đếm
 _request_timestamps = deque()
 _ipm_used = 0
 _opm_used = 0
 _window_start = time.monotonic()
 
 def _estimate_tokens(s: str) -> int:
-    # xấp xỉ 1 token ~ 4 ký tự (an toàn)
     return max(1, len(s) // 4)
 
 async def _anthropic_rate_gate(tokens_in: int, tokens_out_budget: int):
     global _request_timestamps, _ipm_used, _opm_used, _window_start
     now = time.monotonic()
-    # reset cửa sổ nếu >60s
     if now - _window_start >= 60:
         _request_timestamps.clear()
         _ipm_used = 0
         _opm_used = 0
         _window_start = now
 
-    # nếu vượt RPM/IPM/OPM thì đợi đến hết cửa sổ
     while True:
         reqs_last_min = len(_request_timestamps)
         if (reqs_last_min < ANTHROPIC_RPM and
             _ipm_used + tokens_in <= ANTHROPIC_IPM and
             _opm_used + tokens_out_budget <= ANTHROPIC_OPM):
             break
-        # ngủ đến khi cửa sổ reset
         sleep_s = max(0.0, 60 - (time.monotonic() - _window_start))
         await asyncio.sleep(sleep_s)
         now = time.monotonic()
@@ -271,14 +296,12 @@ async def _claude_translate_chunk(text: str, src_lang: str, tgt_lang: str, max_o
         resp.raise_for_status()
         data = resp.json()
 
-        # Claude trả content là list
         out = "".join(p.get("text", "") for p in data.get("content", []) if p.get("type") == "text")
 
         translation = clean_translation(out)
         return translation
 
 def _split_for_translation(long_text: str, chunk_words: int = 800, overlap_words: int = 50):
-    # tái dụng hàm chunk semantic của bạn, chỉ tăng độ dài
     return split_paragraph_semantic(long_text, max_words=chunk_words, overlap=overlap_words)
 
 async def translate_with_claude(text: str, target_lang: str, source_lang: str | None = None):
@@ -286,20 +309,16 @@ async def translate_with_claude(text: str, target_lang: str, source_lang: str | 
         return text
     src = source_lang or detect_lang(text) or "auto"
     tgt = target_lang or "en"
-
-    # nếu đã cùng ngôn ngữ thì trả về luôn
     if src == tgt or (tgt == "en" and src == "en"):
         return text
 
     chunks = _split_for_translation(text, chunk_words=800, overlap_words=60)
     results = []
-    # để tránh cắt cụt: đặt max_tokens cao ~ 3500
     MAX_OUT = 3500
     for ch in chunks:
         try:
             translated = await _claude_translate_chunk(ch, src_lang=src, tgt_lang=tgt, max_output_tokens=MAX_OUT)
         except Exception:
-            # fallback Google if Claude lỗi
             try:
                 translated = GoogleTranslator(source="auto", target=tgt).translate(ch)
             except Exception:
@@ -307,7 +326,6 @@ async def translate_with_claude(text: str, target_lang: str, source_lang: str | 
         results.append(translated)
     return "\n".join(results)
 
-# Wrapper tương thích API cũ của bạn
 async def translate_to_en(text: str):
     lang = detect_lang(text)
     if USE_CLAUDE_TRANSLATION:
@@ -371,7 +389,7 @@ def load_doc_lang_map():
     except Exception:
         return {}
 
-# ========= Ingestion: dịch → EN bằng Claude (giữ pipeline) =========
+# ========= Ingestion: dịch sang EN bằng Claude =========
 async def add_document_to_rag(file, rag: LightRAG):
     try:
         raw_text = read_file_text(file)
@@ -410,22 +428,21 @@ async def add_document_to_rag(file, rag: LightRAG):
 # ========= Query / Chat =========
 RESPONSE_RULES = (
     "You must strictly extract information from the inserted documents. "
-    "Do not add personal opinions or fabricate any facts. "
     "You may paraphrase and summarize only if the meaning is preserved. "
     "If the documents do not contain relevant information, reply exactly: 'No information found in the document.' "
-    "Do not include metadata such as References, Created date, Entity name, or 'from the Knowledge Graph' in the response. "
+    "Do not include a References section or explicitly list sources. Do not mention internal system names, metadata, or the knowledge graph."
     "If multiple retrieved passages have similar meaning, keep only the earliest one."
 )
 
 def to_light_history(hist):
     out = []
-    for m in (hist or []):
-        role = m.get("role")
-        content = m.get("content", "")
-        if not content:
-            continue
-        content = content.split("\n\n📊")[0]
-        out.append({"role": role, "content": content})
+    for item in (hist or []):
+        if isinstance(item, (list, tuple)) and len(item) == 2:
+            user, assistant = item
+            if user:
+                out.append({"role": "user", "content": user})
+            if assistant:
+                out.append({"role": "assistant", "content": assistant})
     return out
 
 
@@ -471,9 +488,9 @@ async def RAG_chatbot(message, history, rag, file, query_mode, translate_back=Tr
     else:
         final = response_en
 
-    # 5) Append vào history, convert Markdown
-    history.append({"role": "user", "content": message})
-    history.append({"role": "assistant", "content": clean_for_chatbot(final)})
+    history = history or []
+
+    history.append((message, clean_for_chatbot(final)))
 
     return history, history
 
@@ -488,7 +505,7 @@ async def main():
     with gr.Blocks() as demo:
         with gr.Row():
             with gr.Column(scale=4):
-                gr.Markdown("## 🌍 Multilingual LightRAG (normalize→EN + Jina v3 + Claude translation + rate-limit)")
+                gr.Markdown("## 🌍 Multilingual LightRAG")
             with gr.Column(scale=1):
                 query_mode = gr.Dropdown(
                     choices=["local", "hybrid"],
@@ -498,7 +515,6 @@ async def main():
 
         rag_state = gr.State(rag)
 
-        # 👉 giữ lại Chatbot UI
         chatbot_ui = gr.Chatbot(type="messages", label="💬 Hội thoại")
         msg = gr.Textbox(label="💬 Nhập câu hỏi")
         history = gr.State([])

@@ -25,9 +25,9 @@ source venv/bin/activate   # hoặc venv\Scripts\activate trên Windows
 pip install -r requirements.txt
 ```
 
-### Dependencies chính
-- `gradio` (UI cho chatbot)  
-- `lightrag` (RAG engine)  
+### Dependencies chính (Gợi ý dùng anaconda để tải)
+- `gradio` (UI cho chatbot) 
+- `lightrag`(RAG engine) 
 - `transformers` + `sentencepiece` (xử lý mô hình NLP)  
 - `python-docx` (đọc file DOCX)  
 - `regex`, `scikit-learn` (xử lý text & vector)  
@@ -36,20 +36,21 @@ pip install -r requirements.txt
 - `deep-translator` (Google Translate fallback)  
 - `httpx` (HTTP client)  
 - `python-dotenv` (quản lý `.env`)  
-- `groq` (client cho Groq API)  
+- `groq` (client cho Groq API) 
+- `pytz` (cần thiết cho thư viện pandas)
 
 ## 4. Thiết lập API keys
 Tạo file `.env` trong thư mục gốc với nội dung:
 
 ```env
 # Anthropic (Claude)
-ANTHROPIC_API_KEY=your_anthropic_key_here
+ANTHROPIC_API_KEY=điền_key_ANTHROPIC
 
 # Jina AI
-JINA_API_KEY=your_jina_key_here
+JINA_API_KEY=điền_key_jina(Không cần key Bearer đằng trước (do mình dùng free nên không biết có đầu nào khác không có gì mọi người không dùng được thì viết Issue nha))
 
 # Groq
-GROQ_API_KEY=your_groq_key_here
+GROQ_API_KEY=điền_key_groq
 
 ```
 
