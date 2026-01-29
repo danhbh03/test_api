@@ -18,14 +18,14 @@ Clone repo và cài dependency:
 ```bash
 git clone <repo-url>
 cd <repo>
-python3.11 -m venv venv
+python3.11 -m venv venv (hoặc dùng anaconda hay miniconda)
 source venv/bin/activate   # hoặc venv\Scripts\activate trên Windows
 
 # Cài dependencies cần thiết
 pip install -r requirements.txt
 ```
 
-### Dependencies chính (Gợi ý dùng anaconda để tải)
+### Dependencies chính (Gợi ý dùng anaconda hay miniconda để tải)
 - `gradio` (UI cho chatbot) 
 - `lightrag`(RAG engine) 
 - `transformers` + `sentencepiece` (xử lý mô hình NLP)  
