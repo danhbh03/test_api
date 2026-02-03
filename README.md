@@ -44,7 +44,7 @@ Tạo file `.env` trong thư mục gốc với nội dung:
 
 ```env
 # Anthropic (Claude)
-ANTHROPIC_API_KEY=điền_key_ANTHROPIC
+ANTHROPIC_API_KEY=điền_key_Claude
 
 # Jina AI
 JINA_API_KEY=điền_key_jina(Không cần key Bearer đằng trước (do mình dùng free nên không biết có đầu nào khác không có gì mọi người không dùng được thì viết Issue nha))
